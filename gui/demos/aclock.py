@@ -34,8 +34,8 @@ def aclock():
     wri.set_clip(True, True, False)
 
     # Instantiate displayable objects
-    dial = Dial(wri, 2, 2, height = 75, ticks = 12, bdcolor=None, label=120, pip=False)  # Border in fg color
-    lbltim = Label(wri, 5, 85, 35)
+    dial = Dial(wri, 5, 5, height = 200, ticks = 12, bdcolor=None, label=120, pip=False)  # Border in fg color
+    lbltim = Label(wri, 5, 250, 50)
     hrs = Pointer(dial)
     mins = Pointer(dial)
     secs = Pointer(dial)
