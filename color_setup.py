@@ -13,18 +13,32 @@
 # possible before importing other modules.
 
 # WIRING (Adafruit pin nos and names).
+# Pyb   SSD
+# 3v3   Vin (10)
+# Gnd   Gnd (11)
+# Y1    DC (3 DC)
+# Y2    CS (5 OC OLEDCS)
+# Y3    Rst (4 R RESET)
+# Y6    CLK (2 CL SCK)
+# Y8    DATA (1 SI MOSI)
 
-from machine import Pin, SPI
+import machine
 import gc
 
 # *** Choose your color display driver here ***
 # Driver supporting non-STM platforms
+# from drivers.ssd1351.ssd1351_generic import SSD1351 as SSD
 
 # STM specific driver
-from drivers.ili9XXX.ili9341 import Display
+from drivers.ssd1351.ssd1351 import SSD1351 as SSD
+
+height = 96  # 1.27 inch 96*128 (rows*cols) display
+# height = 128 # 1.5 inch 128*128 display
+
+pdc = machine.Pin('Y1', machine.Pin.OUT_PP, value=0)
+pcs = machine.Pin('Y2', machine.Pin.OUT_PP, value=1)
+prst = machine.Pin('Y3', machine.Pin.OUT_PP, value=1)
+spi = machine.SPI(2)
 
 gc.collect()  # Precaution before instantiating framebuf
-spi = SPI(2, baudrate=40000000, sck=Pin(18), mosi=Pin(23))
-
-# Name ssd kept to maintain compatability with examples
-ssd = Display(spi, dc=Pin(4), cs=Pin(16), rst=Pin(17))
+ssd = SSD(spi, pcs, pdc, prst, height)  # Create a display instance
