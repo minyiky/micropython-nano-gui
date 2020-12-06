@@ -7,35 +7,40 @@ import utime
 import gc
 import framebuf
 
-@micropython.viper
-def color4to565(c:int) -> int:
-    clup = [    0,30720,  992,31712,
-               15,30735, 1007,25388,
-            52825,63488, 2016,65504,
-               31,63519, 2047,65535]
-    return int(clup[c])
+def color565(r, g, b):
+    """Return RGB565 color value.
+    Args:
+        r (int): Red value.
+        g (int): Green value.
+        b (int): Blue value.
+    """
+    return (r & 0xf8) << 8 | (g & 0xfc) << 3 | b >> 3
 
-@micropython.viper
-def _lcopy(dest, source, length:int):
-    n = 0
-    for x in range(length):
-        c = source[x]
-#         r, g, b = color4to24(int(c) >> 4)
-#         color = int(color565(r, g, b))
-        color = color4to565(int(c) >> 4)
-        dest[n] = int(color) >> 8  # Blue green
-        n += 1
-        dest[n] = int(color) & 0xff   # Red
-        n += 1
-#         r, g, b = color4to24(int(c) & 15)
-#         color = int(color565(r, g, b))
-        color = color4to565(int(c) & 15)
-        dest[n] = int(color) >> 8  # Blue green
-        n += 1
-        dest[n] = int(color) & 0xff   # Red
-        n += 1
 
-class Display(framebuf.FrameBuffer):
+def create_lut():
+    lut = bytearray(32)
+    clup = [(0, 0, 0), # 0 - Black
+            (127, 0, 0), # 1 - red
+            (0, 127, 0), # 2 - green
+            (0, 0, 127), # 3 - blue
+            (127, 127, 0), # 4 - yellow
+            (127, 0, 127), # 5 - magenta
+            (0, 127, 127), # 6 - cyan
+            (80, 80, 80), # 7 - grey
+            (160, 160, 160), # 8 - Grey
+            (255, 0, 0), # 9 - Red
+            (0, 255, 0), # 10 - Green
+            (0, 0, 255), # 11 - Blue
+            (255, 255, 0), # 12 - Yellow
+            (255, 0, 255), # 13 - Magenta
+            (0, 255, 255), # 14 - Cyan
+            (255, 255, 255)] # 15 - White
+    for i, color in enumerate(clup):
+        lut[i*2] = color565(*color) >> 8
+        lut[i*2+1] = color565(*color) & 0xff
+    return lut
+
+class ili9341(framebuf.FrameBuffer):
     """Serial interface for 16-bit color (5-6-5 RGB) IL9341 display.
     Note:  All coordinates are zero based.
     """
@@ -118,12 +123,13 @@ class Display(framebuf.FrameBuffer):
         self.width = width
         self.height = height
         self.mode = framebuf.GS4_HMSB
-        self.lines = 1
+        self.lines = 24
         gc.collect()
         self.buffer = bytearray(self.height * self.width // 2)
         self._mvb = memoryview(self.buffer)
         super().__init__(self.buffer, self.width, self.height, self.mode)
         self._linebuf = bytearray(self.width*self.lines*2)
+        self._clut = create_lut()
         
         if rotation not in self.ROTATE.keys():
             raise RuntimeError('Rotation must be 0, 90, 180 or 270.')
@@ -166,7 +172,37 @@ class Display(framebuf.FrameBuffer):
         self.write_cmd(self.DISPLAY_ON)  # Display on
         sleep(.1)
 
-        self.show()
+    @micropython.viper
+    def _lcopy(self, dest:ptr8, source:ptr8, lut:ptr8, length:int):
+        n = 0
+        for x in range(length):
+            c = source[x]
+            d = c >> 4
+            e = c & 0x0f
+            dest[n] = lut[d*2]
+            n += 1
+            dest[n] = lut[d*2+1]
+            n += 1
+            dest[n] = lut[e*2]
+            n += 1
+            dest[n] = lut[e*2+1]
+            n += 1
+
+    ##@timed_function
+    def block(self, x0, y0, x1, y1, data):
+        """Write a block of data to display.
+        Args:
+            x0 (int):  Starting X position.
+            y0 (int):  Starting Y position.
+            x1 (int):  Ending X position.
+            y1 (int):  Ending Y position.
+            data (bytes): Data buffer to write.
+        """
+        self.write_cmd(self.SET_COLUMN, *ustruct.pack(">HH", x0, x1))
+        self.write_cmd(self.SET_PAGE, *ustruct.pack(">HH", y0, y1))
+
+        self.write_cmd(self.WRITE_RAM)
+        self.write_data(data)
 
     def reset_mpy(self):
         """Perform reset: Low=initialization, High=normal operation.
@@ -178,7 +214,7 @@ class Display(framebuf.FrameBuffer):
         sleep(.05)
 
     def write_cmd(self, command, *args):
-        """Write command to OLED (MicroPython).
+        """Write command to display.
         Args:
             command (byte): ILI9341 command code.
             *args (optional bytes): Data to transmit.
@@ -191,8 +227,8 @@ class Display(framebuf.FrameBuffer):
         if len(args) > 0:
             self.write_data(bytearray(args))
 
-    def write_data(self, data):
-        """Write data to OLED (MicroPython).
+    def write_data_mpy(self, data):
+        """Write data to display.
         Args:
             data (bytes): Data to transmit.
         """
@@ -201,17 +237,21 @@ class Display(framebuf.FrameBuffer):
         self.spi.write(data)
         self.cs(1)
 
-    def show(self):  # Blocks 38.6ms on Pyboard D at stock frequency
+    @timed_function
+    def show(self):  # Blocks ~200ms on esp32 at stock frequency
+        """Write The famebuffer to the display
+        """
         wd = self.width // 2
         ht = self.height
         lb = self._linebuf
         buf = self._mvb
-        self.write_cmd(self.SET_COLUMN, *ustruct.pack(">HH", 0, wd*2))
+        # Commands needed to start data write 
+        self.write_cmd(self.SET_COLUMN, *ustruct.pack(">HH", 0, self.width))
         self.write_cmd(self.SET_PAGE, *ustruct.pack(">HH", 0, ht))
         self.write_cmd(self.WRITE_RAM)
         self.dc(1)
         self.cs(0)
         for start in range(0, wd*ht, wd*self.lines):  # For each line
-            _lcopy(lb, buf[start :], wd*self.lines)  # Copy and map colors (68us)
+            self._lcopy(lb, buf[start :], self._clut, wd*self.lines)  # Copy and map colors (68us)
             self.spi.write(lb)
         self.cs(1)
