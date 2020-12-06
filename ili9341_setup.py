@@ -18,7 +18,7 @@ import gc
 
 # *** Choose your color display driver here ***
 # ili9341 specific driver
-from divers.ili9XXX import ili9341
+from divers.ili9XXX.ili9341 import ili9341
 
 # Kept as ssd to maintain compatability
 gc.collect()  # Precaution before instantiating framebuf
