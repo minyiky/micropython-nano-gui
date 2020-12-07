@@ -139,9 +139,6 @@ class ili9341(framebuf.FrameBuffer):
         self.cs.init(self.cs.OUT, value=1)
         self.dc.init(self.dc.OUT, value=0)
         self.rst.init(self.rst.OUT, value=1)
-        self.reset = self.reset_mpy
-        self.write_cmd = self.write_cmd_mpy
-        self.write_data = self.write_data_mpy
         self.reset()
         # Send initialization commands
         self.write_cmd(self.SWRESET)  # Software reset
@@ -204,7 +201,7 @@ class ili9341(framebuf.FrameBuffer):
         self.write_cmd(self.WRITE_RAM)
         self.write_data(data)
 
-    def reset_mpy(self):
+    def reset(self):
         """Perform reset: Low=initialization, High=normal operation.
         Notes: MicroPython implemntation
         """
@@ -227,7 +224,7 @@ class ili9341(framebuf.FrameBuffer):
         if len(args) > 0:
             self.write_data(bytearray(args))
 
-    def write_data_mpy(self, data):
+    def write_data(self, data):
         """Write data to display.
         Args:
             data (bytes): Data to transmit.
@@ -237,7 +234,6 @@ class ili9341(framebuf.FrameBuffer):
         self.spi.write(data)
         self.cs(1)
 
-    @timed_function
     def show(self):  # Blocks ~200ms on esp32 at stock frequency
         """Write The famebuffer to the display
         """

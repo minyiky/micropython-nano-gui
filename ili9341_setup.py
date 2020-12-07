@@ -18,9 +18,9 @@ import gc
 
 # *** Choose your color display driver here ***
 # ili9341 specific driver
-from divers.ili9XXX.ili9341 import ili9341
+from drivers.ili9XXX.ili9341 import ili9341
 
 # Kept as ssd to maintain compatability
 gc.collect()  # Precaution before instantiating framebuf
 spi = SPI(2, baudrate=10000000, sck=Pin(18), mosi=Pin(23))
-ssd = ili9341(spi, dc=Pin(4), cs=Pin(16), rst=Pin(17))
+ssd = ili9341(spi, dc=Pin(4), cs=Pin(16), rst=Pin(17), width=320, height=240, rotation=90)
